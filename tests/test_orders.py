@@ -27,6 +27,14 @@ class OrderDeskTest(unittest.TestCase):
         self.assertEqual(order["discount_cents"], 120)
         self.assertEqual(order["total_cents"], 1080)
 
+    def test_tax_is_calculated_after_coupon_discount(self):
+        order = self.app.orders.create("ana", [("MUG", 1)], region="CA", coupon_code="TEN")
+
+        self.assertEqual(order["subtotal_cents"], 1200)
+        self.assertEqual(order["discount_cents"], 120)
+        self.assertEqual(order["tax_cents"], 78)
+        self.assertEqual(order["total_cents"], 1158)
+
     def test_out_of_stock(self):
         with self.assertRaises(OutOfStock):
             self.app.orders.create("ana", [("TEE", 4)])
