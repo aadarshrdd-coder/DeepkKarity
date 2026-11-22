@@ -1,9 +1,11 @@
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from tillpoint import db, reports
 from tillpoint.api import App
-from tillpoint.catalog import OutOfStock
+from tillpoint.catalog import Catalog, OutOfStock
 from tillpoint.payments import PaymentError
 
 
@@ -39,6 +41,28 @@ class OrderDeskTest(unittest.TestCase):
         with self.assertRaises(OutOfStock):
             self.app.orders.create("ana", [("TEE", 4)])
         self.assertEqual(self.app.catalog.get_product("TEE").stock, 3)
+
+    def test_stale_worker_cannot_reserve_stock_twice(self):
+        with TemporaryDirectory() as directory:
+            path = str(Path(directory) / "shared.db")
+            first_conn = db.connect(path)
+            second_conn = db.connect(path)
+            try:
+                first_catalog = Catalog(first_conn)
+                second_catalog = Catalog(second_conn)
+                first_catalog.add_product("ONE", "One left", 100, stock=1)
+                first_catalog.get_product("ONE")
+                second_catalog.get_product("ONE")
+
+                first_catalog.reserve("ONE", 1)
+                with self.assertRaises(OutOfStock) as error:
+                    second_catalog.reserve("ONE", 1)
+
+                self.assertEqual(error.exception.available, 0)
+                self.assertEqual(second_conn.execute("SELECT stock FROM products WHERE sku = 'ONE'").fetchone()[0], 0)
+            finally:
+                first_conn.close()
+                second_conn.close()
 
     def test_payment_marks_order_paid(self):
         order = self.app.orders.create("ana", [("MUG", 1)])

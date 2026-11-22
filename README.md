@@ -29,7 +29,7 @@ python3 -m unittest discover -s tests -v
 
 ```
 tillpoint/db.py        schema and time helpers
-tillpoint/catalog.py   products, stock, read cache
+tillpoint/catalog.py   products and atomic stock reservations
 tillpoint/pricing.py   subtotal, coupons, tax
 tillpoint/orders.py    create, cancel, ship, list
 tillpoint/payments.py  payment webhooks
