@@ -77,6 +77,10 @@ class Orders:
         if row is None:
             raise OrderError(f"no order {order_id}")
         order = dict(row)
+        order["paid_cents"] = self.conn.execute(
+            "SELECT COALESCE(SUM(amount_cents), 0) FROM payments WHERE order_id = ?", (order_id,)
+        ).fetchone()[0]
+        order["overpaid_cents"] = max(0, order["paid_cents"] - order["total_cents"])
         order["items"] = [dict(r) for r in self.conn.execute(
             "SELECT sku, qty, unit_price_cents FROM order_items WHERE order_id = ? ORDER BY rowid", (order_id,))]
         return order

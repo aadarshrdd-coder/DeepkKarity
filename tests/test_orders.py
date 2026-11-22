@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from tillpoint import db, reports
 from tillpoint.api import App
 from tillpoint.catalog import OutOfStock
+from tillpoint.payments import PaymentError
 
 
 class OrderDeskTest(unittest.TestCase):
@@ -36,6 +37,31 @@ class OrderDeskTest(unittest.TestCase):
         status, payload = self.app.handle("POST", "/webhooks/payments", {
             "id": "evt_1", "type": "payment.succeeded", "order_id": order["id"], "amount_cents": 1200})
         self.assertEqual((status, payload["status"]), (200, "paid"))
+
+    def test_payment_webhook_retry_is_idempotent(self):
+        order = self.app.orders.create("ana", [("MUG", 1)])
+        event = {"id": "evt_retry", "type": "payment.succeeded",
+                 "order_id": order["id"], "amount_cents": 1200}
+
+        self.assertEqual(self.app.payments.handle_event(event), "paid")
+        self.assertEqual(self.app.payments.handle_event(event), "paid")
+
+        self.assertEqual(self.app.payments.paid_cents(order["id"]), 1200)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM payments").fetchone()[0], 1)
+
+    def test_distinct_excess_payment_is_flagged_for_refund(self):
+        order = self.app.orders.create("ana", [("MUG", 1)])
+        self.app.payments.handle_event(
+            {"id": "evt_paid", "type": "payment.succeeded", "order_id": order["id"], "amount_cents": 1200})
+
+        status = self.app.payments.handle_event(
+            {"id": "evt_extra", "type": "payment.succeeded", "order_id": order["id"], "amount_cents": 500})
+
+        self.assertEqual(status, "overpaid")
+        saved = self.app.orders.get(order["id"])
+        self.assertEqual(saved["status"], "paid")
+        self.assertEqual(saved["paid_cents"], 1700)
+        self.assertEqual(saved["overpaid_cents"], 500)
 
     def test_cancel_paid_order_restocks(self):
         order = self.app.orders.create("ana", [("TEE", 2)])
