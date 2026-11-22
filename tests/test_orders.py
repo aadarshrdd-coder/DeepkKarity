@@ -70,6 +70,14 @@ class OrderDeskTest(unittest.TestCase):
         self.app.orders.cancel(order["id"])
         self.assertEqual(self.app.catalog.get_product("TEE").stock, 3)
 
+    def test_cancel_pending_order_releases_reserved_stock_and_coupon(self):
+        order = self.app.orders.create("ana", [("MUG", 2)], coupon_code="TEN")
+
+        self.app.orders.cancel(order["id"])
+
+        self.assertEqual(self.app.catalog.get_product("MUG").stock, 10)
+        self.assertEqual(self.conn.execute("SELECT uses FROM coupons WHERE code = 'TEN'").fetchone()[0], 0)
+
     def test_daily_sales(self):
         order = self.app.orders.create("ana", [("MUG", 1)])
         noon = datetime(2025, 3, 10, 12, 0, tzinfo=timezone.utc)

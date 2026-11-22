@@ -46,16 +46,16 @@ class Orders:
 
     def cancel(self, order_id):
         """Cancel an order that has not shipped. Its stock and its coupon use go back."""
-        order = self.get(order_id)
-        if order["status"] == "cancelled":
-            return order
-        if order["status"] == "shipped":
-            raise OrderError("a shipped order cannot be cancelled")
         self.conn.execute("BEGIN IMMEDIATE")
         try:
-            if order["status"] == "paid":
-                for item in order["items"]:
-                    self.catalog.release(item["sku"], item["qty"])
+            order = self.get(order_id)
+            if order["status"] == "cancelled":
+                self.conn.execute("COMMIT")
+                return order
+            if order["status"] == "shipped":
+                raise OrderError("a shipped order cannot be cancelled")
+            for item in order["items"]:
+                self.catalog.release(item["sku"], item["qty"])
             if order["coupon"]:
                 self.conn.execute("UPDATE coupons SET uses = uses - 1 WHERE code = ? AND uses > 0", (order["coupon"],))
             self.conn.execute("UPDATE orders SET status = 'cancelled' WHERE id = ?", (order_id,))
